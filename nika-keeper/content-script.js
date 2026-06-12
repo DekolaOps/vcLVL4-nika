@@ -7,6 +7,7 @@ let visualViewportResizeHandler = null;
 let windowResizeHandler = null;
 let isEnabled = true;
 
+
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === "PING_CONTENT_SCRIPT") {
     return;
@@ -22,8 +23,10 @@ chrome.runtime.onMessage.addListener((message) => {
   }
 });
 
+
 initOverlayState();
 subscribeToStorageChanges();
+
 
 async function initOverlayState() {
   try {
@@ -51,6 +54,7 @@ async function initOverlayState() {
   }
 }
 
+
 function subscribeToStorageChanges() {
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "sync") return;
@@ -66,6 +70,7 @@ function subscribeToStorageChanges() {
     restoreOverlayIfBreakIsActive();
   });
 }
+
 
 async function restoreOverlayIfBreakIsActive() {
   try {
@@ -84,6 +89,7 @@ async function restoreOverlayIfBreakIsActive() {
     console.warn("Failed to restore overlay after toggle", error);
   }
 }
+
 
 async function showCatOverlay(breakEndsAtFromMessage) {
   if (!isEnabled) return;
@@ -108,7 +114,6 @@ async function showCatOverlay(breakEndsAtFromMessage) {
 
     countdownId = setInterval(() => {
       const stillRunning = updateTimer(timerEl, currentBreakEndsAt);
-
       if (!stillRunning) {
         hideCatOverlay(true);
       }
@@ -134,6 +139,7 @@ async function showCatOverlay(breakEndsAtFromMessage) {
     "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   overlayEl.style.padding = "24px";
   overlayEl.style.boxSizing = "border-box";
+  overlayEl.style.opacity = "0";
 
   const badge = document.createElement("div");
   badge.style.position = "absolute";
@@ -221,7 +227,7 @@ async function showCatOverlay(breakEndsAtFromMessage) {
   catScaleWrapEl.style.minWidth = "304px";
   catScaleWrapEl.style.maxWidth = "304px";
   catScaleWrapEl.style.transformOrigin = "bottom center";
-  catScaleWrapEl.style.willChange = "transform";
+  catScaleWrapEl.style.willChange = "width";
   catScaleWrapEl.style.display = "flex";
   catScaleWrapEl.style.alignItems = "flex-end";
   catScaleWrapEl.style.justifyContent = "center";
@@ -230,9 +236,9 @@ async function showCatOverlay(breakEndsAtFromMessage) {
   const catUrl = chrome.runtime.getURL("assets/cat-overlay.png");
   catImg.src = catUrl;
   catImg.alt = "Nika gatekeeper";
-  catImg.style.width = "304px";
-  catImg.style.maxWidth = "304px";
-  catImg.style.minWidth = "304px";
+  catImg.style.width = "100%";
+  catImg.style.maxWidth = "100%";
+  catImg.style.minWidth = "unset";
   catImg.style.height = "auto";
   catImg.style.display = "block";
   catImg.style.objectFit = "contain";
@@ -244,7 +250,6 @@ async function showCatOverlay(breakEndsAtFromMessage) {
   };
 
   catScaleWrapEl.appendChild(catImg);
-
   catWrapper.appendChild(textBlock);
   catWrapper.appendChild(catScaleWrapEl);
 
@@ -259,25 +264,55 @@ async function showCatOverlay(breakEndsAtFromMessage) {
   setupZoomCompensation();
   applyCatZoomCompensation();
 
+  // Fade-in оверлея
+  overlayEl.animate(
+    [{ opacity: "0" }, { opacity: "1" }],
+    { duration: 450, easing: "cubic-bezier(0.16, 1, 0.3, 1)", fill: "forwards" }
+  );
+
+  // Кот въезжает слева с bounce
+  const slideIn = catScaleWrapEl.animate(
+    [
+      { transform: "translateX(-110vw)" },
+      { transform: "translateX(8px)",  offset: 0.75 },
+      { transform: "translateX(-6px)", offset: 0.88 },
+      { transform: "translateX(0px)" }
+    ],
+    { duration: 1100, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "forwards" }
+  );
+
+  // После входа — дыхание
+  slideIn.onfinish = () => {
+    if (!catScaleWrapEl) return;
+    catScaleWrapEl.animate(
+      [
+        { transform: "scale(1)" },
+        { transform: "scale(1.011)" },
+        { transform: "scale(1)" }
+      ],
+      { duration: 3500, easing: "ease-in-out", iterations: Infinity }
+    );
+  };
+
   updateTimer(timerEl, currentBreakEndsAt);
 
   countdownId = setInterval(() => {
     const stillRunning = updateTimer(timerEl, currentBreakEndsAt);
-
     if (!stillRunning) {
       hideCatOverlay(true);
     }
   }, 1000);
 }
 
+
 function applyCatZoomCompensation() {
-  if (!catScaleWrapEl) return;
+  if (!overlayEl) return;
 
-  const scale = window.visualViewport?.scale || 1;
-  const compensatedScale = 1 / scale;
-
-  catScaleWrapEl.style.transform = `scale(${compensatedScale})`;
+  // Один CSS zoom на весь оверлей — компенсирует и текст, и кота, и бейдж
+  const browserZoom = window.outerWidth / window.innerWidth;
+  overlayEl.style.zoom = String(1 / browserZoom);
 }
+
 
 function setupZoomCompensation() {
   removeZoomCompensationListeners();
@@ -298,6 +333,7 @@ function setupZoomCompensation() {
   window.addEventListener("resize", windowResizeHandler);
 }
 
+
 function removeZoomCompensationListeners() {
   if (window.visualViewport && visualViewportResizeHandler) {
     window.visualViewport.removeEventListener("resize", visualViewportResizeHandler);
@@ -311,6 +347,7 @@ function removeZoomCompensationListeners() {
   visualViewportResizeHandler = null;
   windowResizeHandler = null;
 }
+
 
 function updateTimer(timerEl, endTime) {
   const remainingMs = endTime - Date.now();
@@ -328,6 +365,7 @@ function updateTimer(timerEl, endTime) {
   return true;
 }
 
+
 function hideCatOverlay(notifyBackground = false) {
   if (countdownId) {
     clearInterval(countdownId);
@@ -335,17 +373,41 @@ function hideCatOverlay(notifyBackground = false) {
   }
 
   removeZoomCompensationListeners();
-
-  if (overlayEl) {
-    overlayEl.remove();
-    overlayEl = null;
-  }
-
-  catScaleWrapEl = null;
   currentBreakEndsAt = null;
-  document.documentElement.style.overflow = previousOverflow || "";
 
-  if (notifyBackground) {
-    chrome.runtime.sendMessage({ type: "BREAK_FINISHED" });
+  if (!overlayEl) {
+    catScaleWrapEl = null;
+    document.documentElement.style.overflow = previousOverflow || "";
+    if (notifyBackground) chrome.runtime.sendMessage({ type: "BREAK_FINISHED" });
+    return;
   }
+
+  const catWrap = catScaleWrapEl;
+  const overlay = overlayEl;
+  overlayEl = null;
+  catScaleWrapEl = null;
+
+  // Кот уходит вправо
+  if (catWrap) {
+    catWrap.getAnimations().forEach(a => a.cancel());
+    catWrap.animate(
+      [
+        { transform: "translateX(0px)", opacity: "1" },
+        { transform: "translateX(110vw)", opacity: "0" }
+      ],
+      { duration: 800, easing: "cubic-bezier(0.4, 0, 0.2, 1)", fill: "forwards" }
+    );
+  }
+
+  // Через 600ms — fade-out и удаление
+  setTimeout(() => {
+    overlay.animate(
+      [{ opacity: "1" }, { opacity: "0" }],
+      { duration: 500, easing: "ease", fill: "forwards" }
+    ).onfinish = () => {
+      if (overlay.parentNode) overlay.remove();
+      document.documentElement.style.overflow = previousOverflow || "";
+      if (notifyBackground) chrome.runtime.sendMessage({ type: "BREAK_FINISHED" });
+    };
+  }, 600);
 }
